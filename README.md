@@ -69,16 +69,33 @@ FOUNDRY_LOCAL_DEVICE=webgpu ./build/cmake/foundry_local_gemma gemma-4-e2b-it \
 Images are accepted as file paths. Audio is read into memory and passed through
 `Item::AudioFromData`, because v2.0.1 rejects URI-based audio in chat requests.
 
+Run a single audio prompt without an image on WebGPU:
+
+```bash
+FOUNDRY_LOCAL_DEVICE=webgpu ./build/cmake/foundry_local_gemma gemma-4-e2b-it \
+  --audio ./assets/recording.wav "Transcribe this audio and summarize it."
+```
+
+Run the same prompt on CPU:
+
+```bash
+FOUNDRY_LOCAL_DEVICE=cpu ./build/cmake/foundry_local_gemma gemma-4-e2b-it \
+  --audio ./assets/recording.wav "Transcribe this audio and summarize it."
+```
+
 ### Foundry Local 2.0.1 audio issue
 
 Text and image requests have been run successfully with the Gemma 4 WebGPU
-variant. Audio does not currently complete:
+variant. The audio-only commands above were tested on both available providers,
+but neither currently completes:
 
-- WebGPU fails in the audio encoder with an invalid WGSL shader involving
-  `inf`, followed by an uncaught `std::out_of_range`.
-- CPU returns `Invalid or unsupported chat template`.
+| Provider | Exit code | Observed failure |
+| --- | ---: | --- |
+| WebGPU | 134 | The audio encoder's `GroupedConv` WGSL shader rejects `inf`, followed by an uncaught `std::out_of_range`. |
+| CPU | 1 | `Foundry Local error [2]: Invalid or unsupported chat template.` |
 
-The standalone audio retry mode is:
+The `--audio-demo` mode additionally attempts a combined image/audio request,
+but it cannot reach that request while the initial audio request fails:
 
 ```bash
 FOUNDRY_LOCAL_DEVICE=webgpu ./build/cmake/foundry_local_gemma gemma-4-e2b-it \

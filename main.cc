@@ -179,8 +179,9 @@ int main(int argc, char* argv[]) {
   const bool run_multimodal_demo = argc >= 6 && std::string_view(argv[2]) == "--multimodal-demo";
   const bool run_audio_demo = argc >= 5 && std::string_view(argv[2]) == "--audio-demo";
   const bool run_image_prompt = argc >= 5 && std::string_view(argv[2]) == "--image";
+  const bool run_audio_prompt = argc >= 5 && std::string_view(argv[2]) == "--audio";
   std::vector<std::string> prompts;
-  if (!run_multimodal_demo && !run_audio_demo && !run_image_prompt) {
+  if (!run_multimodal_demo && !run_audio_demo && !run_image_prompt && !run_audio_prompt) {
     for (int argument = 2; argument < argc; ++argument) {
       prompts.emplace_back(argv[argument]);
     }
@@ -237,6 +238,8 @@ int main(int argc, char* argv[]) {
       RunAudioDemo(*model, argv[3], argv[4]);
     } else if (run_image_prompt) {
       StreamImageResponse(*model, argv[4], argv[3]);
+    } else if (run_audio_prompt) {
+      StreamAudioResponse(*model, argv[4], argv[3]);
     } else {
       for (const auto& prompt : prompts) {
         std::cout << "\nUser: " << prompt << "\n";
