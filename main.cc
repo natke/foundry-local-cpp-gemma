@@ -1,5 +1,7 @@
 #include <foundry_local/foundry_local_cpp.h>
 
+#include "long_context_test.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -7,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -71,7 +74,8 @@ void SelectRequestedVariant(IModel& model) {
   throw std::runtime_error("No model variant matched FOUNDRY_LOCAL_DEVICE=" + requested);
 }
 
-void StreamMessage(IModel& model, MessageItem user_message) {
+std::string StreamMessage(IModel& model, MessageItem user_message,
+                          std::optional<int64_t> max_output_tokens = std::nullopt) {
   ChatSession session(model);
   session.SetStreamingCallback([](flStreamingCallbackData event) -> int {
     flItem* raw_item = nullptr;
@@ -89,6 +93,11 @@ void StreamMessage(IModel& model, MessageItem user_message) {
   Request request;
   request.AddItem(SystemMessage("You are a concise and helpful assistant."));
   request.AddItem(std::move(user_message));
+  if (max_output_tokens) {
+    RequestOptions options;
+    options.search.max_output_tokens = *max_output_tokens;
+    request.SetOptions(options);
+  }
 
   std::cout << "Assistant: ";
   const Response response = session.ProcessRequest(request);
@@ -97,6 +106,18 @@ void StreamMessage(IModel& model, MessageItem user_message) {
   const flUsage usage = response.GetUsage();
   std::cout << "Tokens: " << usage.prompt_tokens << " prompt, " << usage.completion_tokens
             << " completion\n";
+
+  std::string output;
+  for (const auto& item : response.GetItems()) {
+    if (item.GetType() != FOUNDRY_LOCAL_ITEM_MESSAGE) {
+      continue;
+    }
+    const auto message = item.GetMessage();
+    if (message.IsSimpleText()) {
+      output += message.GetSimpleText();
+    }
+  }
+  return output;
 }
 
 void StreamTextResponse(IModel& model, const std::string& prompt) {
@@ -172,6 +193,16 @@ void RunMultimodalDemo(IModel& model, const std::string& shapes_image, const std
   RunAudioDemo(model, shapes_image, audio_file);
 }
 
+void RunContextTest(IModel& model, std::size_t section_count) {
+  const std::string document = sample::BuildLongDocument(section_count);
+  std::cout << "\n--- Near-maximum context summary test ---\n";
+  std::cout << "Sections: " << section_count << "\n";
+  std::cout << "Document bytes: " << document.size() << "\n";
+
+  const std::string output = StreamMessage(model, UserMessage(document), 256);
+  std::cout << "Anchor recall: " << sample::CountAnchorLabels(output) << "/5\n";
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -180,8 +211,10 @@ int main(int argc, char* argv[]) {
   const bool run_audio_demo = argc >= 5 && std::string_view(argv[2]) == "--audio-demo";
   const bool run_image_prompt = argc >= 5 && std::string_view(argv[2]) == "--image";
   const bool run_audio_prompt = argc >= 5 && std::string_view(argv[2]) == "--audio";
+  const bool run_context_test = argc >= 3 && std::string_view(argv[2]) == "--context-test";
   std::vector<std::string> prompts;
-  if (!run_multimodal_demo && !run_audio_demo && !run_image_prompt && !run_audio_prompt) {
+  if (!run_multimodal_demo && !run_audio_demo && !run_image_prompt && !run_audio_prompt &&
+      !run_context_test) {
     for (int argument = 2; argument < argc; ++argument) {
       prompts.emplace_back(argv[argument]);
     }
@@ -240,6 +273,9 @@ int main(int argc, char* argv[]) {
       StreamImageResponse(*model, argv[4], argv[3]);
     } else if (run_audio_prompt) {
       StreamAudioResponse(*model, argv[4], argv[3]);
+    } else if (run_context_test) {
+      const std::size_t section_count = argc >= 4 ? std::stoull(argv[3]) : 68;
+      RunContextTest(*model, section_count);
     } else {
       for (const auto& prompt : prompts) {
         std::cout << "\nUser: " << prompt << "\n";

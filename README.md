@@ -1,6 +1,12 @@
 # Foundry Local 2.0.1 C++ Gemma sample
 
-This sample uses the Foundry Local v2.0.1 C++ Session API to:
+This sample provides two executables:
+
+- `foundry_local_gemma` uses the Foundry Local v2.0.1 C++ Session API.
+- `raw_ort_genai` loads an already-downloaded model directly with the bundled
+  ONNX Runtime GenAI 0.15.2 library.
+
+The Foundry Local executable:
 
 1. Resolve a model from the live catalog.
 2. Download its selected hardware-optimized variant.
@@ -37,7 +43,65 @@ FOUNDRY_LOCAL_DEVICE=webgpu ./build/cmake/foundry_local_gemma gemma-4-e2b-it \
   "Name three benefits of on-device inference."
 ```
 
+Run the near-maximum context test:
+
+```bash
+FOUNDRY_LOCAL_DEVICE=webgpu ./build/cmake/foundry_local_gemma gemma-4-e2b-it \
+  --context-test
+```
+
+The default test uses 68 sections, which fits close to Gemma's packaged
+4,096-token limit after reserving 256 output tokens. Pass a different section
+count after `--context-test` to adjust its size. A 2,300-section document is
+approximately 127,800 tokens before the chat wrapper.
+
 The v2.0.1 macOS release asset supports Apple silicon.
+
+## Raw ONNX Runtime GenAI
+
+The bootstrap scripts download the ORT GenAI 0.15.2 public headers that match
+the libraries bundled with Foundry Local v2.0.1. The raw executable accepts a
+downloaded model directory rather than a catalog alias.
+
+Run Gemma 4 directly:
+
+```bash
+./build/cmake/raw_ort_genai \
+  "$HOME/.foundry_local_cpp_gemma/cache/models/Microsoft/gemma-4-e2b-it-generic-gpu-2/v2" \
+  "Explain why the sky appears blue in two sentences."
+```
+
+Run Qwen 3.5 2B directly:
+
+```bash
+./build/cmake/raw_ort_genai \
+  "$HOME/.foundry_local_cpp_gemma/cache/models/Microsoft/qwen3.5-2b-text-generic-gpu-3/v3" \
+  "Explain why the sky appears blue in two sentences."
+```
+
+The raw runner applies each model's chat template, explicitly sets a
+2,048-token prefill chunk size, and sets ORT GenAI `max_length` to the tokenized
+input plus the requested output allowance. This permits diagnostic tests that
+are not constrained by Foundry Local's request validation.
+
+Run the 8K Gemma context test:
+
+```bash
+./build/cmake/raw_ort_genai \
+  "$HOME/.foundry_local_cpp_gemma/cache/models/Microsoft/gemma-4-e2b-it-generic-gpu-2/v2" \
+  --context-test 140
+```
+
+Run the approximately 128K Qwen context test:
+
+```bash
+./build/cmake/raw_ort_genai \
+  "$HOME/.foundry_local_cpp_gemma/cache/models/Microsoft/qwen3.5-2b-text-generic-gpu-3/v3" \
+  --context-test 2300
+```
+
+Catalog variant versions can change. Adjust these paths to match the model
+directory printed by `foundry_local_gemma` after download.
 
 ## Linux
 
@@ -101,6 +165,27 @@ but it cannot reach that request while the initial audio request fails:
 FOUNDRY_LOCAL_DEVICE=webgpu ./build/cmake/foundry_local_gemma gemma-4-e2b-it \
   --audio-demo ./assets/shapes.jpg ./assets/recording.wav
 ```
+
+The equivalent raw ORT GenAI audio test is:
+
+```bash
+./build/cmake/raw_ort_genai \
+  "$HOME/.foundry_local_cpp_gemma/cache/models/Microsoft/gemma-4-e2b-it-generic-gpu-2/v2" \
+  --audio ./assets/recording.wav \
+  "Transcribe this audio and summarize it in one sentence."
+```
+
+It fails in the same audio encoder before token generation:
+
+```text
+WebGPU device error: Error while parsing WGSL: unresolved value 'inf'
+While calling Device.CreateShaderModule("GroupedConv")
+libc++abi: terminating due to uncaught std::out_of_range
+```
+
+The raw process exits with code 134. This demonstrates that the WebGPU audio
+failure occurs in ORT/audio-encoder execution rather than in the Foundry Local
+chat-session wrapper.
 
 ## Windows
 

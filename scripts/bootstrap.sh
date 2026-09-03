@@ -2,6 +2,7 @@
 set -euo pipefail
 
 version="2.0.1"
+ort_genai_version="0.15.2"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 install_dir="${root}/.foundry-local"
 
@@ -21,13 +22,22 @@ case "$(uname -s)-$(uname -m)" in
     ;;
 esac
 
-if [[ -f "${install_dir}/include/foundry_local/foundry_local_cpp.h" ]]; then
+mkdir -p "${install_dir}"
+if [[ ! -f "${install_dir}/include/foundry_local/foundry_local_cpp.h" ]]; then
+  url="https://github.com/microsoft/foundry-local/releases/download/v${version}/${asset}"
+  echo "Downloading ${url}"
+  curl --fail --location --silent --show-error "${url}" | tar -xzf - -C "${install_dir}"
+  echo "Installed Foundry Local ${version} in ${install_dir}"
+else
   echo "Foundry Local ${version} is already installed in ${install_dir}"
-  exit 0
 fi
 
-mkdir -p "${install_dir}"
-url="https://github.com/microsoft/foundry-local/releases/download/v${version}/${asset}"
-echo "Downloading ${url}"
-curl --fail --location --silent --show-error "${url}" | tar -xzf - -C "${install_dir}"
-echo "Installed Foundry Local ${version} in ${install_dir}"
+mkdir -p "${install_dir}/include"
+for header in ort_genai.h ort_genai_c.h; do
+  if [[ ! -f "${install_dir}/include/${header}" ]]; then
+    url="https://raw.githubusercontent.com/microsoft/onnxruntime-genai/v${ort_genai_version}/src/${header}"
+    echo "Downloading ${url}"
+    curl --fail --location --silent --show-error \
+      --output "${install_dir}/include/${header}" "${url}"
+  fi
+done
